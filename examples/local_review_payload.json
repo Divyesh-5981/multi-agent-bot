@@ -1,0 +1,17 @@
+{
+  "post_comment": false,
+  "files": [
+    {
+      "filename": "app/auth.py",
+      "patch": "@@ -1,4 +1,8 @@\n import sqlite3\n \n def login(email, password):\n+    api_key = \"sk_test_hardcoded_secret\"\n+    query = f\"SELECT * FROM users WHERE email = '{email}' AND password = '{password}'\"\n+    conn = sqlite3.connect(\"app.db\")\n+    return conn.execute(query).fetchone()\n-    return None\n",
+      "additions": 4,
+      "deletions": 1
+    },
+    {
+      "filename": "app/users.py",
+      "patch": "@@ -10,4 +10,10 @@\n def hydrate_users(users, db):\n+    hydrated = []\n+    for user in users:\n+        for role in db.get_roles():\n+            if role.user_id == user.id:\n+                hydrated.append((user, role))\n+    return hydrated\n-    return users\n",
+      "additions": 6,
+      "deletions": 1
+    }
+  ]
+}
