@@ -90,8 +90,16 @@ class Settings:
         )
 
     @property
-    def hf_api_url(self) -> str:
-        return f"{self.hf_api_base_url}/chat/completions"
+    def api_url(self) -> str:
+        return f"{self.api_base_url}/chat/completions"
+
+    @property
+    def github_app_configured(self) -> bool:
+        return bool(
+            self.github_app_id
+            and self.github_app_private_key_path
+            and self.github_app_installation_id
+        )
 
     @property
     def github_configured(self) -> bool:
@@ -102,5 +110,5 @@ class Settings:
         return bool(self.github_app_id and (self.github_app_private_key or self.github_app_private_key_path))
 
     @property
-    def hf_configured(self) -> bool:
-        return bool(self.hf_api_token) or self.mock_ai
+    def api_configured(self) -> bool:
+        return bool(self.api_token) or self.mock_ai

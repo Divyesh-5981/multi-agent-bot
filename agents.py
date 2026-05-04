@@ -194,7 +194,7 @@ class AgentSystem:
         return self._vote_findings(all_runs)
 
     async def _single_review_call(self, prompt: str, chunk: DiffChunk, agent_type: AgentCategory) -> list[Finding]:
-        response = await self.call_gemma(prompt)
+        response = await self.call_model(prompt)
         parsed = self.parse_findings(response)
         return [self._normalize_finding(item, chunk, agent_type) for item in parsed]
 
@@ -236,12 +236,12 @@ class AgentSystem:
             code_diff=chunk.patch,
         )
 
-    async def call_gemma(self, prompt: str, model_override: str | None = None) -> str:
-        if not self.settings.hf_api_token:
-            raise RuntimeError("HF_API_TOKEN is required unless MOCK_AI=true")
+    async def call_model(self, prompt: str, model_override: str | None = None) -> str:
+        if not self.settings.api_token:
+            raise RuntimeError("API_TOKEN is required unless MOCK_AI=true")
 
         request_id = str(uuid.uuid4())[:8]
-        model = model_override or self.settings.hf_model_id
+        model = model_override or self.settings.model_id
 
         payload = {
             "model": model,
@@ -257,7 +257,7 @@ class AgentSystem:
             "top_p": 0.9,
         }
         headers = {
-            "Authorization": f"Bearer {self.settings.hf_api_token}",
+            "Authorization": f"Bearer {self.settings.api_token}",
             "Content-Type": "application/json",
         }
         timeout = aiohttp.ClientTimeout(total=self.settings.agent_timeout_seconds)
@@ -266,13 +266,13 @@ class AgentSystem:
             for attempt in range(1, self.settings.agent_max_retries + 1):
                 try:
                     async with aiohttp.ClientSession(timeout=timeout) as session:
-                        async with session.post(self.settings.hf_api_url, headers=headers, json=payload) as response:
+                        async with session.post(self.settings.api_url, headers=headers, json=payload) as response:
                             body = await response.text()
                             if response.status in {429, 500, 502, 503, 504} and attempt < self.settings.agent_max_retries:
                                 await asyncio.sleep(min(2**attempt, 8))
                                 continue
                             if response.status >= 400:
-                                raise RuntimeError(f"Hugging Face API error {response.status}: {body[:500]}")
+                                raise RuntimeError(f"API error {response.status}: {body[:500]}")
                             self.total_tokens += self.estimate_tokens(prompt)
                             data = json.loads(body)
                             return self._extract_chat_response(data)
@@ -290,7 +290,7 @@ class AgentSystem:
 
     async def synthesize(self, findings_by_agent: dict[AgentCategory, list[Finding]]) -> ReviewResult:
         deterministic = self._deterministic_synthesis(findings_by_agent)
-        if self.settings.mock_ai or not self.settings.hf_api_token or not deterministic.findings:
+        if self.settings.mock_ai or not self.settings.api_token or not deterministic.findings:
             return deterministic
 
         prompt = SYNTHESIZER_AGENT_PROMPT.format(
@@ -301,7 +301,7 @@ class AgentSystem:
 
         try:
             synth_model = self.settings.synthesizer_model_id
-            response = await self.call_gemma(prompt, model_override=synth_model)
+            response = await self.call_model(prompt, model_override=synth_model)
             data = self._safe_json_parse(response)
             if not isinstance(data, dict):
                 return deterministic
@@ -394,7 +394,7 @@ class AgentSystem:
     def _safe_json_parse(self, response: str) -> Any:
         stripped = response.strip()
 
-        # Strip thinking tags from Qwen3 models
+        # Strip thinking tags if present
         if "<think>" in stripped:
             idx = stripped.find("</think>")
             if idx != -1:

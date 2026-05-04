@@ -68,7 +68,7 @@ class CodeReviewOrchestrator:
             lines_added=sum(self._file_additions(file) for file in changed_files),
             lines_deleted=sum(self._file_deletions(file) for file in changed_files),
             tokens_estimated=sum(chunk.token_estimate for chunk in chunks) + (self.agent_system.total_tokens - starting_tokens),
-            model=self.settings.hf_model_id,
+            model=self.settings.model_id,
             cost_per_1k_tokens=self.settings.cost_per_1k_tokens,
             elapsed_seconds=elapsed,
         )
