@@ -31,7 +31,12 @@ class CodeReviewOrchestrator:
         review = await self.review_changed_files(changed_files)
         should_post = self.settings.post_github_comment if post_comment is None else post_comment
         if should_post:
-            self.github_client.post_review_comment(repo_name, pr_number, review)
+            try:
+                self.github_client.post_review_comment(repo_name, pr_number, review)
+                review.comment_posted = True
+            except RuntimeError as exc:
+                review.comment_error = str(exc)
+                review.comment_posted = False
         return review
 
     async def review_changed_files(self, changed_files: list[ChangedFile | dict[str, Any]]) -> ReviewResult:

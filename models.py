@@ -113,9 +113,11 @@ class ReviewResult:
     low_count: int = 0
     findings: list[Finding] = field(default_factory=list)
     stats: ReviewStats = field(default_factory=ReviewStats)
+    comment_posted: bool | None = None
+    comment_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "summary": self.summary,
             "critical_count": self.critical_count,
             "high_count": self.high_count,
@@ -124,6 +126,11 @@ class ReviewResult:
             "findings": [finding.to_dict() for finding in self.findings],
             "stats": self.stats.to_dict(),
         }
+        if self.comment_posted is not None:
+            result["comment_posted"] = self.comment_posted
+        if self.comment_error:
+            result["comment_error"] = self.comment_error
+        return result
 
 
 def normalize_severity(value: Any, default: Severity = "low") -> Severity:

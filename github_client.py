@@ -54,6 +54,13 @@ class GitHubClient:
         try:
             pull_request.create_issue_comment(body)
         except Exception as exc:
+            error_msg = str(exc)
+            if "403" in error_msg or "Resource not accessible" in error_msg:
+                raise RuntimeError(
+                    "GitHub token lacks Issues write permission. "
+                    "Update your fine-grained token at https://github.com/settings/tokens "
+                    "and grant 'Issues: Read and write' for this repository."
+                ) from exc
             raise RuntimeError(f"Failed to post GitHub comment: {exc}") from exc
         return body
 
