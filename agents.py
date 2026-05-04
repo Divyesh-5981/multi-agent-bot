@@ -192,7 +192,7 @@ class AgentSystem:
                 },
                 {"role": "user", "content": prompt},
             ],
-            "max_tokens": 700,
+            "max_tokens": 1500,
             "temperature": 0.1,
             "top_p": 0.9,
         }
