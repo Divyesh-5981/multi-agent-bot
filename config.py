@@ -33,10 +33,24 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_optional_int(name: str) -> int | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     github_token: str | None = None
     github_webhook_secret: str | None = None
+    github_app_id: int | None = None
+    github_app_private_key: str | None = None
+    github_app_private_key_path: str | None = None
+    github_app_installation_id: int | None = None
     hf_api_token: str | None = None
     hf_model_id: str = "llama-3.3-70b-versatile"
     hf_api_base_url: str = "https://api.groq.com/openai/v1"
@@ -57,6 +71,10 @@ class Settings:
         return cls(
             github_token=os.getenv("GITHUB_TOKEN") or None,
             github_webhook_secret=os.getenv("GITHUB_WEBHOOK_SECRET") or None,
+            github_app_id=_env_optional_int("GITHUB_APP_ID"),
+            github_app_private_key=os.getenv("GITHUB_APP_PRIVATE_KEY") or None,
+            github_app_private_key_path=os.getenv("GITHUB_APP_PRIVATE_KEY_PATH") or None,
+            github_app_installation_id=_env_optional_int("GITHUB_APP_INSTALLATION_ID"),
             hf_api_token=os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN") or os.getenv("GROQ_API_KEY") or None,
             hf_model_id=os.getenv("HF_MODEL_ID", defaults.hf_model_id),
             hf_api_base_url=os.getenv("HF_API_BASE_URL", defaults.hf_api_base_url).rstrip("/"),
@@ -77,7 +95,11 @@ class Settings:
 
     @property
     def github_configured(self) -> bool:
-        return bool(self.github_token)
+        return bool(self.github_token) or self.github_app_configured
+
+    @property
+    def github_app_configured(self) -> bool:
+        return bool(self.github_app_id and (self.github_app_private_key or self.github_app_private_key_path))
 
     @property
     def hf_configured(self) -> bool:

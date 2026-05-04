@@ -28,6 +28,7 @@ class PullRequestReviewRequest(BaseModel):
     repo_name: str = Field(..., examples=["owner/repo"])
     pr_number: int = Field(..., ge=1)
     post_comment: bool | None = None
+    installation_id: int | None = Field(default=None, ge=1)
 
 
 @app.get("/")
@@ -61,8 +62,8 @@ async def _handle_webhook_request(
     if context is None:
         return JSONResponse({"status": "ignored"})
 
-    repo_name, pr_number = context
-    background_tasks.add_task(_run_pr_review_background, repo_name, pr_number)
+    repo_name, pr_number, installation_id = context
+    background_tasks.add_task(_run_pr_review_background, repo_name, pr_number, installation_id)
     return JSONResponse({"status": "processing", "repo": repo_name, "pr_number": pr_number})
 
 
@@ -91,6 +92,7 @@ async def review_pr(request: PullRequestReviewRequest) -> dict[str, Any]:
         repo_name=request.repo_name,
         pr_number=request.pr_number,
         post_comment=request.post_comment,
+        installation_id=request.installation_id,
     )
     return review.to_dict()
 
@@ -101,9 +103,9 @@ async def review_local(request: LocalReviewRequest) -> dict[str, Any]:
     return review.to_dict()
 
 
-async def _run_pr_review_background(repo_name: str, pr_number: int) -> None:
+async def _run_pr_review_background(repo_name: str, pr_number: int, installation_id: int | None = None) -> None:
     try:
-        await orchestrator.review_pr(repo_name, pr_number, post_comment=True)
+        await orchestrator.review_pr(repo_name, pr_number, post_comment=True, installation_id=installation_id)
     except Exception as exc:
         print(f"Review failed for {repo_name}#{pr_number}: {exc}")
 

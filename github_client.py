@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from pathlib import Path
 from typing import Any
 
 from config import Settings
@@ -28,10 +29,14 @@ class GitHubClient:
 
     # ── PR diff fetching ──────────────────────────────────────────────
 
-    def get_pr_diff(self, repo_name: str, pr_number: int) -> list[ChangedFile]:
-        if not self.client:
-            raise RuntimeError("GITHUB_TOKEN is required to fetch pull request diffs")
-        repo = self.client.get_repo(repo_name)
+    def get_pr_diff(self, repo_name: str, pr_number: int, installation_id: int | None = None) -> list[ChangedFile]:
+        client = self._authenticated_client(installation_id)
+        if not client:
+            raise RuntimeError(
+                "GitHub authentication is required to fetch pull request diffs. "
+                "Configure a GitHub App installation or GITHUB_TOKEN."
+            )
+        repo = client.get_repo(repo_name)
         pull_request = repo.get_pull(pr_number)
         changed_files: list[ChangedFile] = []
         for changed_file in pull_request.get_files():
@@ -48,12 +53,22 @@ class GitHubClient:
 
     # ── Inline review posting ─────────────────────────────────────────
 
-    def post_inline_review(self, repo_name: str, pr_number: int, review: ReviewResult) -> None:
+    def post_inline_review(
+        self,
+        repo_name: str,
+        pr_number: int,
+        review: ReviewResult,
+        installation_id: int | None = None,
+    ) -> None:
         """Post a pull request review with inline comments on specific diff lines."""
-        if not self.client:
-            raise RuntimeError("GITHUB_TOKEN is required to post pull request reviews")
+        client = self._authenticated_client(installation_id)
+        if not client:
+            raise RuntimeError(
+                "GitHub authentication is required to post pull request reviews. "
+                "Configure a GitHub App installation or GITHUB_TOKEN."
+            )
 
-        repo = self.client.get_repo(repo_name)
+        repo = client.get_repo(repo_name)
         pull_request = repo.get_pull(pr_number)
         head_commit = pull_request.get_commits().reversed[0]
 
@@ -102,8 +117,8 @@ class GitHubClient:
                 return
             if "403" in error_msg or "Resource not accessible" in error_msg:
                 raise RuntimeError(
-                    "GitHub token lacks pull request review permission. "
-                    "Grant 'Pull requests: Read and write' for this repository."
+                    "GitHub credentials lack pull request review permission. "
+                    "Grant 'Pull requests: Read and write' and 'Contents: Read' for this repository."
                 ) from exc
             raise RuntimeError(f"Failed to post review: {exc}") from exc
 
@@ -280,6 +295,50 @@ class GitHubClient:
             ) from exc
         return Github(token)
 
+    def _authenticated_client(self, installation_id: int | None = None):
+        effective_installation_id = installation_id or self.settings.github_app_installation_id
+        if effective_installation_id is not None:
+            if not self.settings.github_app_configured:
+                raise RuntimeError(
+                    "GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH "
+                    "are required to authenticate as a GitHub App installation."
+                )
+            return self._build_app_installation_client(effective_installation_id)
+        if self.client:
+            return self.client
+        if self.settings.github_app_configured:
+            raise RuntimeError(
+                "GitHub App installation id is required. Use webhook payload installation.id "
+                "or set GITHUB_APP_INSTALLATION_ID for manual runs."
+            )
+        return None
+
+    def _build_app_installation_client(self, installation_id: int):
+        try:
+            from github import Auth, Github, GithubIntegration
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyGithub is required when GitHub App authentication is configured. "
+                "Run `pip install -r requirements.txt`."
+            ) from exc
+        private_key = self._github_app_private_key()
+        if not self.settings.github_app_id or not private_key:
+            raise RuntimeError(
+                "GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_PATH "
+                "are required to authenticate as a GitHub App installation."
+            )
+        app_auth = Auth.AppAuth(self.settings.github_app_id, private_key)
+        integration = GithubIntegration(auth=app_auth)
+        access_token = integration.get_access_token(installation_id)
+        return Github(auth=Auth.Token(access_token.token))
+
+    def _github_app_private_key(self) -> str | None:
+        if self.settings.github_app_private_key:
+            return self.settings.github_app_private_key.replace("\\n", "\n")
+        if self.settings.github_app_private_key_path:
+            return Path(self.settings.github_app_private_key_path).read_text(encoding="utf-8")
+        return None
+
     def verify_webhook_signature(self, payload_body: bytes, signature_header: str | None) -> bool:
         secret = self.settings.github_webhook_secret
         if not secret:
@@ -291,7 +350,7 @@ class GitHubClient:
         ).hexdigest()
         return hmac.compare_digest(expected, signature_header)
 
-    def webhook_pr_context(self, payload: dict[str, Any]) -> tuple[str, int] | None:
+    def webhook_pr_context(self, payload: dict[str, Any]) -> tuple[str, int, int | None] | None:
         action = payload.get("action")
         if action not in {"opened", "reopened", "synchronize", "ready_for_review"}:
             return None
@@ -303,4 +362,6 @@ class GitHubClient:
         pr_number = pull_request.get("number") or payload.get("number")
         if not repo_name or not pr_number:
             return None
-        return str(repo_name), int(pr_number)
+        installation = payload.get("installation") or {}
+        installation_id = installation.get("id")
+        return str(repo_name), int(pr_number), int(installation_id) if installation_id else None

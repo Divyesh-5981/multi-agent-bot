@@ -26,13 +26,19 @@ class CodeReviewOrchestrator:
         self.diff_processor = diff_processor or DiffProcessor(self.settings)
         self.agent_system = agent_system or AgentSystem(self.settings)
 
-    async def review_pr(self, repo_name: str, pr_number: int, post_comment: bool | None = None) -> ReviewResult:
-        changed_files = self.github_client.get_pr_diff(repo_name, pr_number)
+    async def review_pr(
+        self,
+        repo_name: str,
+        pr_number: int,
+        post_comment: bool | None = None,
+        installation_id: int | None = None,
+    ) -> ReviewResult:
+        changed_files = self.github_client.get_pr_diff(repo_name, pr_number, installation_id=installation_id)
         review = await self.review_changed_files(changed_files)
         should_post = self.settings.post_github_comment if post_comment is None else post_comment
         if should_post:
             try:
-                self.github_client.post_inline_review(repo_name, pr_number, review)
+                self.github_client.post_inline_review(repo_name, pr_number, review, installation_id=installation_id)
                 review.comment_posted = True
             except RuntimeError as exc:
                 review.comment_error = str(exc)
