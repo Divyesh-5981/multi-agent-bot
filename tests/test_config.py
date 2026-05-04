@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from config import Settings
+from app.config import Settings
 
 
 def test_settings_from_env_uses_defaults_without_env(monkeypatch) -> None:
-    monkeypatch.setattr("config.load_dotenv", lambda: None)
+    monkeypatch.setattr("app.config.load_dotenv", lambda: None)
     for name in (
         "GITHUB_TOKEN",
         "GITHUB_WEBHOOK_SECRET",
@@ -39,7 +39,7 @@ def test_settings_from_env_uses_defaults_without_env(monkeypatch) -> None:
 
 
 def test_settings_from_env_parses_overrides(monkeypatch) -> None:
-    monkeypatch.setattr("config.load_dotenv", lambda: None)
+    monkeypatch.setattr("app.config.load_dotenv", lambda: None)
     monkeypatch.setenv("MOCK_AI", "true")
     monkeypatch.setenv("POST_GITHUB_COMMENT", "false")
     monkeypatch.setenv("MAX_REVIEW_CHUNKS", "12")

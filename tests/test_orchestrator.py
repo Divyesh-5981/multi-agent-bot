@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from config import Settings
-from orchestrator import CodeReviewOrchestrator
+from app.config import Settings
+from app.orchestrator import CodeReviewOrchestrator
 
 
 def test_orchestrator_reviews_changed_files_in_mock_mode() -> None:

@@ -9,8 +9,8 @@ from typing import Any
 
 import aiohttp
 
-from config import Settings
-from models import AgentCategory, DiffChunk, Finding, ReviewResult, SEVERITY_RANK, count_findings, normalize_severity
+from app.config import Settings
+from app.models import AgentCategory, DiffChunk, Finding, ReviewResult, SEVERITY_RANK, count_findings, normalize_severity
 
 # ── Few-shot enhanced prompts ─────────────────────────────────────────
 # Research: Few-shot examples give +21.5% performance on small models

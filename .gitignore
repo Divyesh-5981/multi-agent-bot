@@ -1,13 +1,27 @@
+# Environment
 .env
 .venv/
 venv/
+
+# Python
 __pycache__/
-.pytest_cache/
 *.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
 .coverage
 htmlcov/
+
+# IDE
 .DS_Store
 .idea/
 .vscode/
-node_modules
-multi-agent-review-bot.2026-05-04.private-key.pem
+
+# Dependencies
+node_modules/
+
+# Secrets
+*.pem

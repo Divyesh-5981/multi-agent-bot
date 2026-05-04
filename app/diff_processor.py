@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from pathlib import PurePosixPath
 from typing import Any
 
-from config import Settings
-from models import ChangedFile, DiffChunk, DiffLine
+from app.config import Settings
+from app.models import ChangedFile, DiffChunk, DiffLine
 
 HUNK_HEADER_RE = re.compile(
     r"^@@\s+-(?P<old_start>\d+)(?:,(?P<old_count>\d+))?\s+\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))?\s+@@"

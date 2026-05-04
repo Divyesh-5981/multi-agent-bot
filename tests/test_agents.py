@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
-from agents import AgentSystem
-from config import Settings
-from diff_processor import DiffProcessor
-from models import ChangedFile, Finding
+from app.agents import AgentSystem
+from app.config import Settings
+from app.diff_processor import DiffProcessor
+from app.models import ChangedFile, Finding
 
 
 def _sample_chunk():

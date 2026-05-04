@@ -7,8 +7,8 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, st
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from config import Settings
-from orchestrator import CodeReviewOrchestrator
+from app.config import Settings
+from app.orchestrator import CodeReviewOrchestrator
 
 settings = Settings.from_env()
 orchestrator = CodeReviewOrchestrator(settings=settings)
@@ -142,4 +142,4 @@ async def _run_pr_review_background(repo_name: str, pr_number: int, installation
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
