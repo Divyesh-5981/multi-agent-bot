@@ -47,11 +47,10 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/webhook")
-async def handle_webhook(
+async def _handle_webhook_request(
     request: Request,
     background_tasks: BackgroundTasks,
-    x_hub_signature_256: str | None = Header(default=None),
+    x_hub_signature_256: str | None = None,
 ) -> JSONResponse:
     body = await request.body()
     if not orchestrator.github_client.verify_webhook_signature(body, x_hub_signature_256):
@@ -65,6 +64,25 @@ async def handle_webhook(
     repo_name, pr_number = context
     background_tasks.add_task(_run_pr_review_background, repo_name, pr_number)
     return JSONResponse({"status": "processing", "repo": repo_name, "pr_number": pr_number})
+
+
+@app.post("/webhook")
+async def handle_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_hub_signature_256: str | None = Header(default=None),
+) -> JSONResponse:
+    return await _handle_webhook_request(request, background_tasks, x_hub_signature_256)
+
+
+@app.post("/")
+async def handle_webhook_root(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_hub_signature_256: str | None = Header(default=None),
+) -> JSONResponse:
+    """Fallback webhook handler — ngrok free tier can strip the path."""
+    return await _handle_webhook_request(request, background_tasks, x_hub_signature_256)
 
 
 @app.post("/review/pr")
