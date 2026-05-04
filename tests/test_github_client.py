@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from config import Settings
-from github_client import GitHubClient
-from models import Finding, ReviewResult, ReviewStats
+from app.config import Settings
+from app.github_client import GitHubClient
+from app.models import Finding, ReviewResult, ReviewStats
 
 
 def test_webhook_signature_verification() -> None:

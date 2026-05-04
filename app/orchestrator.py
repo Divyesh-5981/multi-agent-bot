@@ -4,11 +4,11 @@ import asyncio
 import time
 from typing import Any
 
-from agents import AgentSystem
-from config import Settings
-from diff_processor import DiffProcessor
-from github_client import GitHubClient
-from models import AgentCategory, ChangedFile, Finding, ReviewResult, ReviewStats
+from app.agents import AgentSystem
+from app.config import Settings
+from app.diff_processor import DiffProcessor
+from app.github_client import GitHubClient
+from app.models import AgentCategory, ChangedFile, Finding, ReviewResult, ReviewStats
 
 AGENT_TYPES: tuple[AgentCategory, ...] = ("security", "performance", "quality")
 

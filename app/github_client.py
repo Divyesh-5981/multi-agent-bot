@@ -5,8 +5,8 @@ import hmac
 from pathlib import Path
 from typing import Any
 
-from config import Settings
-from models import ChangedFile, Finding, ReviewResult, SEVERITY_RANK
+from app.config import Settings
+from app.models import ChangedFile, Finding, ReviewResult, SEVERITY_RANK
 
 SEVERITY_ICONS = {
     "critical": "\U0001f534",  # red circle

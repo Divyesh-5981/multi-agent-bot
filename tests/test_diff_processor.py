@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from config import Settings
-from diff_processor import DiffProcessor
-from models import ChangedFile
+from app.config import Settings
+from app.diff_processor import DiffProcessor
+from app.models import ChangedFile
 
 
 def test_diff_processor_parses_hunk_line_numbers() -> None:
