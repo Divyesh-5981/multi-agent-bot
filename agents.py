@@ -184,16 +184,17 @@ class AgentSystem:
             raise RuntimeError("HF_API_TOKEN is required unless MOCK_AI=true")
 
         payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 700,
-                "temperature": 0.1,
-                "top_p": 0.9,
-                "return_full_text": False,
-            },
-            "options": {
-                "wait_for_model": True,
-            },
+            "model": self.settings.hf_model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a code review assistant. Always respond with valid JSON only. No markdown, no explanation, just JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 700,
+            "temperature": 0.1,
+            "top_p": 0.9,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.hf_api_token}",
@@ -213,13 +214,14 @@ class AgentSystem:
                             if response.status >= 400:
                                 raise RuntimeError(f"Hugging Face API error {response.status}: {body[:500]}")
                             self.total_tokens += self.estimate_tokens(prompt)
-                            return self._extract_generated_text(json.loads(body))
+                            data = json.loads(body)
+                            return self._extract_chat_response(data)
                 except (aiohttp.ClientError, asyncio.TimeoutError, json.JSONDecodeError) as exc:
                     if attempt >= self.settings.agent_max_retries:
-                        raise RuntimeError(f"Gemma request failed after {attempt} attempts: {exc}") from exc
+                        raise RuntimeError(f"API request failed after {attempt} attempts: {exc}") from exc
                     await asyncio.sleep(min(2**attempt, 8))
 
-        raise RuntimeError("Gemma request failed")
+        raise RuntimeError("API request failed")
 
     def parse_findings(self, response: str) -> list[dict[str, Any]]:
         data = self._safe_json_parse(response)
@@ -369,6 +371,26 @@ class AgentSystem:
                 if depth == 0:
                     return text[start : index + 1]
         return None
+
+    def _extract_chat_response(self, payload: Any) -> str:
+        """Extract content from OpenAI-compatible chat completions response."""
+        if isinstance(payload, dict):
+            if "error" in payload:
+                raise RuntimeError(str(payload["error"]))
+            choices = payload.get("choices")
+            if isinstance(choices, list) and choices:
+                message = choices[0].get("message", {})
+                content = message.get("content", "")
+                if content:
+                    return str(content)
+            # Update token count from usage if available
+            usage = payload.get("usage")
+            if isinstance(usage, dict):
+                total = usage.get("total_tokens", 0)
+                if total:
+                    self.total_tokens += total
+        # Fallback to legacy extraction
+        return self._extract_generated_text(payload)
 
     def _extract_generated_text(self, payload: Any) -> str:
         if isinstance(payload, list) and payload:

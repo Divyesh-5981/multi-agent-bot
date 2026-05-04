@@ -38,8 +38,8 @@ class Settings:
     github_token: str | None = None
     github_webhook_secret: str | None = None
     hf_api_token: str | None = None
-    hf_model_id: str = "google/gemma-3-1b-it"
-    hf_api_base_url: str = "https://api-inference.huggingface.co/models"
+    hf_model_id: str = "Qwen/Qwen2.5-Coder-32B-Instruct"
+    hf_api_base_url: str = "https://router.huggingface.co/v1"
     max_review_chunks: int = 50
     max_tokens_per_chunk: int = 2000
     max_agent_concurrency: int = 6
@@ -71,7 +71,7 @@ class Settings:
 
     @property
     def hf_api_url(self) -> str:
-        return f"{self.hf_api_base_url}/{self.hf_model_id}"
+        return f"{self.hf_api_base_url}/chat/completions"
 
     @property
     def github_configured(self) -> bool:
