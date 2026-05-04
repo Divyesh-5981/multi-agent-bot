@@ -38,7 +38,7 @@ class Settings:
     github_token: str | None = None
     github_webhook_secret: str | None = None
     hf_api_token: str | None = None
-    hf_model_id: str = "Qwen/Qwen2.5-Coder-32B-Instruct"
+    hf_model_id: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
     hf_api_base_url: str = "https://router.huggingface.co/v1"
     max_review_chunks: int = 50
     max_tokens_per_chunk: int = 2000
