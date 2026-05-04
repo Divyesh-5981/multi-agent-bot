@@ -18,6 +18,24 @@ def test_webhook_signature_verification() -> None:
     assert not client.verify_webhook_signature(payload, "sha256=bad")
 
 
+def test_webhook_pr_context_includes_installation_id() -> None:
+    client = GitHubClient(Settings(mock_ai=True))
+    payload = {
+        "action": "opened",
+        "repository": {"full_name": "owner/repo"},
+        "pull_request": {"number": 42, "draft": False},
+        "installation": {"id": 123456},
+    }
+
+    assert client.webhook_pr_context(payload) == ("owner/repo", 42, 123456)
+
+
+def test_github_app_private_key_normalizes_escaped_newlines() -> None:
+    client = GitHubClient(Settings(github_app_private_key="line1\\nline2", mock_ai=True))
+
+    assert client._github_app_private_key() == "line1\nline2"
+
+
 def test_format_review_comment_contains_findings_and_stats() -> None:
     client = GitHubClient(Settings(mock_ai=True))
     review = ReviewResult(
@@ -29,6 +47,6 @@ def test_format_review_comment_contains_findings_and_stats() -> None:
 
     body = client.format_review_comment(review)
 
-    assert "AI Code Review" in body
-    assert "app.py:7" in body
-    assert "Estimated cost" in body
+    assert "## Walkthrough" in body
+    assert "`app.py`" in body
+    assert "**Cost:**" in body

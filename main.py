@@ -28,6 +28,7 @@ class PullRequestReviewRequest(BaseModel):
     repo_name: str = Field(..., examples=["owner/repo"])
     pr_number: int = Field(..., ge=1)
     post_comment: bool | None = None
+    installation_id: int | None = Field(default=None, ge=1)
 
 
 @app.get("/")
@@ -35,11 +36,11 @@ def root() -> dict[str, Any]:
     auth_mode = "github_app" if settings.github_app_configured else ("pat" if settings.github_token else "none")
     return {
         "status": "running",
-        "model": settings.model_id,
+        "model": settings.hf_model_id,
         "agents": ["security", "performance", "quality", "synthesizer"],
         "github_configured": settings.github_configured,
         "github_auth_mode": auth_mode,
-        "api_configured": settings.api_configured,
+        "hf_configured": settings.hf_configured,
         "mock_ai": settings.mock_ai,
     }
 
@@ -55,16 +56,34 @@ async def _handle_webhook_request(
     x_hub_signature_256: str | None = None,
 ) -> JSONResponse:
     body = await request.body()
+    print(f"[WEBHOOK] Received {request.method} {request.url.path} ({len(body)} bytes)")
+    print(f"[WEBHOOK] Signature header present: {x_hub_signature_256 is not None}")
+    print(f"[WEBHOOK] X-GitHub-Event: {request.headers.get('x-github-event', 'N/A')}")
+
     if not orchestrator.github_client.verify_webhook_signature(body, x_hub_signature_256):
+        print("[WEBHOOK] ❌ Signature verification FAILED")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook signature")
+    print("[WEBHOOK] ✅ Signature verified")
 
     payload = await request.json()
+    action = payload.get("action", "N/A")
+    pr = payload.get("pull_request", {})
+    repo = payload.get("repository", {})
+    installation = payload.get("installation", {})
+    print(f"[WEBHOOK] Action: {action}")
+    print(f"[WEBHOOK] Repo: {repo.get('full_name', 'N/A')}")
+    print(f"[WEBHOOK] PR: #{pr.get('number', 'N/A')} - {pr.get('title', 'N/A')}")
+    print(f"[WEBHOOK] PR draft: {pr.get('draft', 'N/A')}")
+    print(f"[WEBHOOK] Installation ID: {installation.get('id', 'N/A')}")
+
     context = orchestrator.github_client.webhook_pr_context(payload)
     if context is None:
+        print(f"[WEBHOOK] ⏭️ Ignored (action={action}, draft={pr.get('draft')})")
         return JSONResponse({"status": "ignored"})
 
-    repo_name, pr_number = context
-    background_tasks.add_task(_run_pr_review_background, repo_name, pr_number)
+    repo_name, pr_number, installation_id = context
+    print(f"[WEBHOOK] 🚀 Processing review for {repo_name}#{pr_number} (installation={installation_id})")
+    background_tasks.add_task(_run_pr_review_background, repo_name, pr_number, installation_id)
     return JSONResponse({"status": "processing", "repo": repo_name, "pr_number": pr_number})
 
 
@@ -93,6 +112,7 @@ async def review_pr(request: PullRequestReviewRequest) -> dict[str, Any]:
         repo_name=request.repo_name,
         pr_number=request.pr_number,
         post_comment=request.post_comment,
+        installation_id=request.installation_id,
     )
     return review.to_dict()
 
@@ -103,11 +123,20 @@ async def review_local(request: LocalReviewRequest) -> dict[str, Any]:
     return review.to_dict()
 
 
-async def _run_pr_review_background(repo_name: str, pr_number: int) -> None:
+async def _run_pr_review_background(repo_name: str, pr_number: int, installation_id: int | None = None) -> None:
+    print(f"[REVIEW] Starting background review for {repo_name}#{pr_number} (installation={installation_id})")
     try:
-        await orchestrator.review_pr(repo_name, pr_number, post_comment=True)
+        review = await orchestrator.review_pr(repo_name, pr_number, post_comment=True, installation_id=installation_id)
+        print(f"[REVIEW] ✅ Review complete for {repo_name}#{pr_number}")
+        print(f"[REVIEW]   Summary: {review.summary[:100]}...")
+        print(f"[REVIEW]   Findings: {len(review.findings)} total")
+        print(f"[REVIEW]   Comment posted: {review.comment_posted}")
+        if review.comment_error:
+            print(f"[REVIEW]   Comment error: {review.comment_error}")
     except Exception as exc:
-        print(f"Review failed for {repo_name}#{pr_number}: {exc}")
+        import traceback
+        print(f"[REVIEW] ❌ Review failed for {repo_name}#{pr_number}: {exc}")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
