@@ -32,7 +32,7 @@ class CodeReviewOrchestrator:
         should_post = self.settings.post_github_comment if post_comment is None else post_comment
         if should_post:
             try:
-                self.github_client.post_review_comment(repo_name, pr_number, review)
+                self.github_client.post_inline_review(repo_name, pr_number, review)
                 review.comment_posted = True
             except RuntimeError as exc:
                 review.comment_error = str(exc)

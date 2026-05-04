@@ -5,20 +5,13 @@ import hmac
 from typing import Any
 
 from config import Settings
-from models import ChangedFile, ReviewResult, SEVERITIES, SEVERITY_RANK
+from models import ChangedFile, Finding, ReviewResult, SEVERITY_RANK
 
-SEVERITY_TITLES = {
-    "critical": "Critical Issues",
-    "high": "High Priority",
-    "medium": "Medium Priority",
-    "low": "Low Priority",
-}
-
-SEVERITY_EMOJIS = {
-    "critical": "🔴",
-    "high": "🟠",
-    "medium": "🟡",
-    "low": "🔵",
+SEVERITY_LABELS = {
+    "critical": "CRITICAL",
+    "high": "HIGH",
+    "medium": "MEDIUM",
+    "low": "LOW",
 }
 
 
@@ -45,24 +38,203 @@ class GitHubClient:
             )
         return changed_files
 
-    def post_review_comment(self, repo_name: str, pr_number: int, review: ReviewResult) -> str:
+    def post_inline_review(self, repo_name: str, pr_number: int, review: ReviewResult) -> None:
+        """Post a proper pull request review with inline comments on specific lines."""
         if not self.client:
-            raise RuntimeError("GITHUB_TOKEN is required to post pull request comments")
+            raise RuntimeError("GITHUB_TOKEN is required to post pull request reviews")
+
         repo = self.client.get_repo(repo_name)
         pull_request = repo.get_pull(pr_number)
-        body = self.format_review_comment(review)
+        head_commit = pull_request.get_commits().reversed[0]
+
+        # Build the set of valid diff lines per file so we only comment on reviewable lines
+        valid_lines = self._get_valid_diff_lines(pull_request)
+
+        # Build inline comments from findings
+        inline_comments = []
+        for finding in review.findings:
+            line = finding.line
+            file_lines = valid_lines.get(finding.file, set())
+
+            # Only comment on lines that exist in the diff; skip otherwise
+            if line not in file_lines:
+                nearest = self._nearest_valid_line(line, file_lines)
+                if nearest is None:
+                    continue
+                line = nearest
+
+            body = self._format_inline_comment(finding)
+            inline_comments.append({"path": finding.file, "line": line, "body": body})
+
+        # Deduplicate: one comment per file:line, merge findings
+        deduped = self._deduplicate_inline_comments(inline_comments)
+
+        # Decide the review verdict
+        event, verdict_summary = self._decide_verdict(review)
+
+        # Build the review body
+        review_body = self._format_review_body(review, verdict_summary)
+
         try:
-            pull_request.create_issue_comment(body)
+            pull_request.create_review(
+                commit=head_commit,
+                body=review_body,
+                event=event,
+                comments=[
+                    {"path": c["path"], "line": c["line"], "body": c["body"]}
+                    for c in deduped
+                ],
+            )
         except Exception as exc:
             error_msg = str(exc)
+            # GitHub doesn't allow REQUEST_CHANGES on your own PR — fall back to COMMENT
+            if "422" in error_msg and "own pull request" in error_msg and event == "REQUEST_CHANGES":
+                pull_request.create_review(
+                    commit=head_commit,
+                    body=review_body,
+                    event="COMMENT",
+                    comments=[
+                        {"path": c["path"], "line": c["line"], "body": c["body"]}
+                        for c in deduped
+                    ],
+                )
+                return
             if "403" in error_msg or "Resource not accessible" in error_msg:
                 raise RuntimeError(
-                    "GitHub token lacks Issues write permission. "
+                    "GitHub token lacks pull request review permission. "
                     "Update your fine-grained token at https://github.com/settings/tokens "
-                    "and grant 'Issues: Read and write' for this repository."
+                    "and grant 'Pull requests: Read and write' for this repository."
                 ) from exc
-            raise RuntimeError(f"Failed to post GitHub comment: {exc}") from exc
-        return body
+            raise RuntimeError(f"Failed to post review: {exc}") from exc
+
+    def _get_valid_diff_lines(self, pull_request: Any) -> dict[str, set[int]]:
+        """Parse the PR diff to find which new-file line numbers are valid for inline comments."""
+        import re
+        hunk_re = re.compile(r"^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@")
+        valid: dict[str, set[int]] = {}
+        for f in pull_request.get_files():
+            if not f.patch:
+                continue
+            lines: set[int] = set()
+            current_line = 0
+            for raw_line in f.patch.splitlines():
+                m = hunk_re.match(raw_line)
+                if m:
+                    current_line = int(m.group(1))
+                    continue
+                if raw_line.startswith("-"):
+                    continue
+                if raw_line.startswith("+"):
+                    lines.add(current_line)
+                    current_line += 1
+                else:
+                    current_line += 1
+            valid[f.filename] = lines
+        return valid
+
+    def _nearest_valid_line(self, target: int, valid_lines: set[int]) -> int | None:
+        if not valid_lines:
+            return None
+        return min(valid_lines, key=lambda l: abs(l - target))
+
+    def _decide_verdict(self, review: ReviewResult) -> tuple[str, str]:
+        """Decide whether to approve or request changes based on findings."""
+        if review.critical_count > 0:
+            return "REQUEST_CHANGES", (
+                f"Requesting changes. Found {review.critical_count} critical issue(s) "
+                "that must be resolved before this PR can be merged."
+            )
+        if review.high_count > 0:
+            return "REQUEST_CHANGES", (
+                f"Requesting changes. Found {review.high_count} high-severity issue(s) "
+                "that should be addressed before merging."
+            )
+        if review.medium_count > 0 or review.low_count > 0:
+            total = review.medium_count + review.low_count
+            return "COMMENT", (
+                f"No blocking issues found. {total} minor suggestion(s) noted inline. "
+                "This PR can be merged at the author's discretion."
+            )
+        return "APPROVE", "No issues found. The changes look clean across security, performance, and code quality checks."
+
+    def _format_inline_comment(self, finding: Finding) -> str:
+        """Format a single inline comment like a senior engineer would write it."""
+        label = SEVERITY_LABELS[finding.severity]
+        category = finding.category.title()
+        lines = [
+            f"**[{label}] {category}**",
+            "",
+            finding.issue,
+            "",
+            f"**Suggestion:** {finding.suggestion}",
+        ]
+        return "\n".join(lines)
+
+    def _deduplicate_inline_comments(self, comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Merge multiple comments on the same file:line into one."""
+        grouped: dict[tuple[str, int], list[str]] = {}
+        for c in comments:
+            key = (c["path"], c["line"])
+            grouped.setdefault(key, []).append(c["body"])
+        result = []
+        for (path, line), bodies in grouped.items():
+            if len(bodies) == 1:
+                result.append({"path": path, "line": line, "body": bodies[0]})
+            else:
+                merged = "\n\n---\n\n".join(bodies)
+                result.append({"path": path, "line": line, "body": merged})
+        return result
+
+    def _format_review_body(self, review: ReviewResult, verdict: str) -> str:
+        """Format the top-level review summary body."""
+        stats = review.stats
+        lines = [
+            "## AI Code Review",
+            "",
+            f"Reviewed by multi-agent system (`{stats.model}`) in {stats.elapsed_seconds:.1f}s.",
+            "",
+            "### Verdict",
+            "",
+            verdict,
+            "",
+            "### Summary",
+            "",
+            review.summary,
+            "",
+        ]
+
+        counts = []
+        if review.critical_count:
+            counts.append(f"{review.critical_count} critical")
+        if review.high_count:
+            counts.append(f"{review.high_count} high")
+        if review.medium_count:
+            counts.append(f"{review.medium_count} medium")
+        if review.low_count:
+            counts.append(f"{review.low_count} low")
+
+        if counts:
+            lines.append(f"**Issues found:** {', '.join(counts)}")
+        else:
+            lines.append("**Issues found:** None")
+
+        lines.extend([
+            "",
+            "<details>",
+            "<summary>Review Stats</summary>",
+            "",
+            f"- Files reviewed: {stats.files_reviewed}",
+            f"- Chunks reviewed: {stats.chunks_reviewed}",
+            f"- Lines changed: +{stats.lines_added} / -{stats.lines_deleted}",
+            f"- Agents: Security, Performance, Quality, Synthesizer",
+            f"- Model: `{stats.model}`",
+            f"- Estimated tokens: {stats.tokens_estimated:,}",
+            f"- Estimated cost: ${stats.estimated_cost:.4f}",
+            f"- Review time: {stats.elapsed_seconds:.1f}s",
+            "",
+            "</details>",
+        ])
+        return "\n".join(lines)
 
     def _build_client(self, token: str | None):
         if not token:
@@ -83,77 +255,8 @@ class GitHubClient:
         return hmac.compare_digest(expected, signature_header)
 
     def format_review_comment(self, review: ReviewResult) -> str:
-        stats = review.stats
-        lines = [
-            "## 🤖 AI Code Review",
-            f"*Reviewed by 4x `{stats.model}` agents in {stats.elapsed_seconds:.1f}s*",
-            "",
-            "### 📊 Summary",
-            review.summary,
-            "",
-            "---",
-            "",
-        ]
-
-        if not review.findings:
-            lines.extend(
-                [
-                    "### ✅ No blocking issues found",
-                    "The Security, Performance, and Code Quality agents did not identify actionable issues in the reviewed diff chunks.",
-                    "",
-                    "---",
-                    "",
-                ]
-            )
-        else:
-            sorted_findings = sorted(
-                review.findings,
-                key=lambda finding: (-SEVERITY_RANK[finding.severity], finding.file, finding.line, finding.category),
-            )
-            for severity in SEVERITIES:
-                severity_findings = [finding for finding in sorted_findings if finding.severity == severity]
-                if not severity_findings:
-                    continue
-                lines.extend(
-                    [
-                        f"### {SEVERITY_EMOJIS[severity]} {SEVERITY_TITLES[severity]} ({len(severity_findings)})",
-                        "",
-                    ]
-                )
-                for finding in severity_findings:
-                    confidence = f" · confidence {finding.confidence:.0%}" if finding.confidence is not None else ""
-                    lines.extend(
-                        [
-                            f"**`{finding.file}:{finding.line}`** - {finding.category.title()}{confidence}",
-                            f"❌ **Issue:** {finding.issue}",
-                            f"💡 **Fix:** {finding.suggestion}",
-                            "",
-                        ]
-                    )
-                lines.extend(["---", ""])
-
-        lines.extend(
-            [
-                "### ✅ What Went Well",
-                "- The review was split into focused Security, Performance, and Code Quality passes.",
-                "- Findings were deduplicated and prioritized before this summary was posted.",
-                "",
-                "<details>",
-                "<summary>📈 Review Stats</summary>",
-                "",
-                f"- **Files reviewed:** {stats.files_reviewed}",
-                f"- **Chunks reviewed:** {stats.chunks_reviewed}",
-                f"- **Lines changed:** +{stats.lines_added} / -{stats.lines_deleted}",
-                "- **Agents used:** Security, Performance, Quality, Synthesizer",
-                f"- **Model:** `{stats.model}`",
-                f"- **Estimated tokens:** {stats.tokens_estimated:,}",
-                f"- **Estimated cost:** ${stats.estimated_cost:.4f}",
-                f"- **Review time:** {stats.elapsed_seconds:.1f}s",
-                "",
-                "</details>",
-            ]
-        )
-        return "\n".join(lines)
+        """Legacy summary comment format — kept for /review/local endpoint."""
+        return self._format_review_body(review, self._decide_verdict(review)[1])
 
     def webhook_pr_context(self, payload: dict[str, Any]) -> tuple[str, int] | None:
         action = payload.get("action")
