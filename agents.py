@@ -183,6 +183,10 @@ class AgentSystem:
         if not self.settings.hf_api_token:
             raise RuntimeError("HF_API_TOKEN is required unless MOCK_AI=true")
 
+        # Unique request ID prevents response caching on free-tier APIs
+        import uuid
+        request_id = str(uuid.uuid4())[:8]
+
         payload = {
             "model": self.settings.hf_model_id,
             "messages": [
@@ -190,10 +194,10 @@ class AgentSystem:
                     "role": "system",
                     "content": "You are a code review assistant. Always respond with valid JSON only. No markdown, no explanation, just JSON.",
                 },
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": f"[rid:{request_id}]\n{prompt}"},
             ],
-            "max_tokens": 700,
-            "temperature": 0.1,
+            "max_tokens": 1500,
+            "temperature": 0.15,
             "top_p": 0.9,
         }
         headers = {
