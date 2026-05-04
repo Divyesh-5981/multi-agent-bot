@@ -38,8 +38,9 @@ class Settings:
     github_token: str | None = None
     github_webhook_secret: str | None = None
     hf_api_token: str | None = None
-    hf_model_id: str = "Qwen/Qwen2.5-Coder-7B-Instruct"
-    hf_api_base_url: str = "https://router.huggingface.co/v1"
+    hf_model_id: str = "llama-3.3-70b-versatile"
+    hf_api_base_url: str = "https://api.groq.com/openai/v1"
+    synthesizer_model_id: str | None = None
     max_review_chunks: int = 50
     max_tokens_per_chunk: int = 2000
     max_agent_concurrency: int = 6
@@ -56,9 +57,10 @@ class Settings:
         return cls(
             github_token=os.getenv("GITHUB_TOKEN") or None,
             github_webhook_secret=os.getenv("GITHUB_WEBHOOK_SECRET") or None,
-            hf_api_token=os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN") or None,
+            hf_api_token=os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN") or os.getenv("GROQ_API_KEY") or None,
             hf_model_id=os.getenv("HF_MODEL_ID", defaults.hf_model_id),
             hf_api_base_url=os.getenv("HF_API_BASE_URL", defaults.hf_api_base_url).rstrip("/"),
+            synthesizer_model_id=os.getenv("SYNTHESIZER_MODEL_ID") or None,
             max_review_chunks=_env_int("MAX_REVIEW_CHUNKS", defaults.max_review_chunks),
             max_tokens_per_chunk=_env_int("MAX_TOKENS_PER_CHUNK", defaults.max_tokens_per_chunk),
             max_agent_concurrency=_env_int("MAX_AGENT_CONCURRENCY", defaults.max_agent_concurrency),

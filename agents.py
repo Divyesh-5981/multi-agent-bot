@@ -153,7 +153,7 @@ JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | r
 MIN_CONFIDENCE_THRESHOLD = 0.5
 
 # Number of runs per agent for self-consistency voting
-SELF_CONSISTENCY_RUNS = 2
+SELF_CONSISTENCY_RUNS = 1
 
 
 class AgentSystem:
@@ -236,14 +236,15 @@ class AgentSystem:
             code_diff=chunk.patch,
         )
 
-    async def call_gemma(self, prompt: str) -> str:
+    async def call_gemma(self, prompt: str, model_override: str | None = None) -> str:
         if not self.settings.hf_api_token:
             raise RuntimeError("HF_API_TOKEN is required unless MOCK_AI=true")
 
         request_id = str(uuid.uuid4())[:8]
+        model = model_override or self.settings.hf_model_id
 
         payload = {
-            "model": self.settings.hf_model_id,
+            "model": model,
             "messages": [
                 {
                     "role": "system",
@@ -299,7 +300,8 @@ class AgentSystem:
         )
 
         try:
-            response = await self.call_gemma(prompt)
+            synth_model = self.settings.synthesizer_model_id
+            response = await self.call_gemma(prompt, model_override=synth_model)
             data = self._safe_json_parse(response)
             if not isinstance(data, dict):
                 return deterministic
