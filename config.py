@@ -37,9 +37,12 @@ def _env_float(name: str, default: float) -> float:
 class Settings:
     github_token: str | None = None
     github_webhook_secret: str | None = None
-    hf_api_token: str | None = None
-    hf_model_id: str = "llama-3.3-70b-versatile"
-    hf_api_base_url: str = "https://api.groq.com/openai/v1"
+    github_app_id: str | None = None
+    github_app_private_key_path: str | None = None
+    github_app_installation_id: str | None = None
+    api_token: str | None = None
+    model_id: str = "llama-3.3-70b-versatile"
+    api_base_url: str = "https://api.groq.com/openai/v1"
     synthesizer_model_id: str | None = None
     max_review_chunks: int = 50
     max_tokens_per_chunk: int = 2000
@@ -57,9 +60,12 @@ class Settings:
         return cls(
             github_token=os.getenv("GITHUB_TOKEN") or None,
             github_webhook_secret=os.getenv("GITHUB_WEBHOOK_SECRET") or None,
-            hf_api_token=os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN") or os.getenv("GROQ_API_KEY") or None,
-            hf_model_id=os.getenv("HF_MODEL_ID", defaults.hf_model_id),
-            hf_api_base_url=os.getenv("HF_API_BASE_URL", defaults.hf_api_base_url).rstrip("/"),
+            github_app_id=os.getenv("GITHUB_APP_ID") or None,
+            github_app_private_key_path=os.getenv("GITHUB_APP_PRIVATE_KEY_PATH") or None,
+            github_app_installation_id=os.getenv("GITHUB_APP_INSTALLATION_ID") or None,
+            api_token=os.getenv("API_TOKEN") or os.getenv("GROQ_API_KEY") or os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACE_API_TOKEN") or None,
+            model_id=os.getenv("MODEL_ID") or os.getenv("HF_MODEL_ID", defaults.model_id),
+            api_base_url=(os.getenv("API_BASE_URL") or os.getenv("HF_API_BASE_URL", defaults.api_base_url)).rstrip("/"),
             synthesizer_model_id=os.getenv("SYNTHESIZER_MODEL_ID") or None,
             max_review_chunks=_env_int("MAX_REVIEW_CHUNKS", defaults.max_review_chunks),
             max_tokens_per_chunk=_env_int("MAX_TOKENS_PER_CHUNK", defaults.max_tokens_per_chunk),
@@ -72,13 +78,21 @@ class Settings:
         )
 
     @property
-    def hf_api_url(self) -> str:
-        return f"{self.hf_api_base_url}/chat/completions"
+    def api_url(self) -> str:
+        return f"{self.api_base_url}/chat/completions"
+
+    @property
+    def github_app_configured(self) -> bool:
+        return bool(
+            self.github_app_id
+            and self.github_app_private_key_path
+            and self.github_app_installation_id
+        )
 
     @property
     def github_configured(self) -> bool:
-        return bool(self.github_token)
+        return self.github_app_configured or bool(self.github_token)
 
     @property
-    def hf_configured(self) -> bool:
-        return bool(self.hf_api_token) or self.mock_ai
+    def api_configured(self) -> bool:
+        return bool(self.api_token) or self.mock_ai

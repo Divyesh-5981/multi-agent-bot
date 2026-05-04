@@ -14,7 +14,7 @@ settings = Settings.from_env()
 orchestrator = CodeReviewOrchestrator(settings=settings)
 app = FastAPI(
     title="Multi-Agent Code Review Bot",
-    description="Four Gemma 3 1B agents review pull request diffs for security, performance, and code quality issues.",
+    description="Multi-agent system reviews pull request diffs for security, performance, and code quality issues.",
     version="1.0.0",
 )
 
@@ -32,12 +32,14 @@ class PullRequestReviewRequest(BaseModel):
 
 @app.get("/")
 def root() -> dict[str, Any]:
+    auth_mode = "github_app" if settings.github_app_configured else ("pat" if settings.github_token else "none")
     return {
         "status": "running",
-        "model": settings.hf_model_id,
+        "model": settings.model_id,
         "agents": ["security", "performance", "quality", "synthesizer"],
         "github_configured": settings.github_configured,
-        "hf_configured": settings.hf_configured,
+        "github_auth_mode": auth_mode,
+        "api_configured": settings.api_configured,
         "mock_ai": settings.mock_ai,
     }
 

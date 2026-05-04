@@ -90,7 +90,7 @@ class ReviewStats:
     lines_added: int = 0
     lines_deleted: int = 0
     tokens_estimated: int = 0
-    model: str = "google/gemma-3-1b-it"
+    model: str = "llama-3.3-70b-versatile"
     cost_per_1k_tokens: float = 0.0001
     elapsed_seconds: float = 0.0
 

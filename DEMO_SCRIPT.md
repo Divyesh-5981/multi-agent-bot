@@ -2,7 +2,7 @@
 
 ## 0:00-0:15 Introduction
 
-I built a multi-agent code review bot powered by four small Gemma 1B agents. Each agent specializes in one review discipline, then a synthesizer merges the findings into a GitHub-ready review.
+I built a multi-agent code review bot powered by four Llama 3.3 70B agents running on Groq's free tier. Each agent specializes in one review discipline, then a synthesizer merges the findings into a GitHub-ready review.
 
 ## 0:15-0:45 Show the Pull Request
 
