@@ -90,16 +90,23 @@ class Settings:
         )
 
     @property
-    def api_url(self) -> str:
-        return f"{self.api_base_url}/chat/completions"
+    def hf_api_url(self) -> str:
+        return f"{self.hf_api_base_url}/chat/completions"
 
     @property
-    def github_app_configured(self) -> bool:
-        return bool(
-            self.github_app_id
-            and self.github_app_private_key_path
-            and self.github_app_installation_id
-        )
+    def api_token(self) -> str | None:
+        """Alias for hf_api_token used by AgentSystem."""
+        return self.hf_api_token
+
+    @property
+    def api_url(self) -> str:
+        """Alias for hf_api_url used by AgentSystem."""
+        return self.hf_api_url
+
+    @property
+    def model_id(self) -> str:
+        """Alias for hf_model_id used by AgentSystem and orchestrator."""
+        return self.hf_model_id
 
     @property
     def github_configured(self) -> bool:
@@ -110,5 +117,5 @@ class Settings:
         return bool(self.github_app_id and (self.github_app_private_key or self.github_app_private_key_path))
 
     @property
-    def api_configured(self) -> bool:
-        return bool(self.api_token) or self.mock_ai
+    def hf_configured(self) -> bool:
+        return bool(self.hf_api_token) or self.mock_ai
